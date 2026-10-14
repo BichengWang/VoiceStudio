@@ -1,9 +1,6 @@
 import { expect, it } from 'vitest';
 import { importToText } from '@shared/utils/importStory';
-import {
-  splitIntoChunks,
-  splitStoryText,
-} from '@shared/utils/splitStoryText';
+import { splitIntoChunks, splitStoryText } from '@shared/utils/splitStoryText';
 it('removes SRT metadata and retains spoken lines', () => {
   expect(
     importToText(
@@ -74,4 +71,31 @@ it('drops WebVTT scaffolding from an imported story caption file', () => {
     'WEBVTT\n\nNOTE translator notes\n\nintro\n00:00:00.160 --> 00:00:02.310 align:start position:0%\nhey<00:00:00.480><c> everyone</c>\n';
   expect(importToText('captions.vtt', vtt)).toBe('hey everyone');
   expect(importToText('captions.srt', vtt)).toBe('hey everyone');
+});
+
+it.each(['srt', 'vtt'])('excludes ruby readings from a story %s import', (extension) => {
+  for (const ruby of [
+    '<ruby>read<rt>reed</rt></ruby>',
+    '<ruby.word>read<rt.reading><i>reed</i></rt></ruby>',
+    '<ruby>read<rt>reed</ruby>',
+    '<ruby>re<rt>ree</rt>ad<rt>ad</rt></ruby>',
+    '<ruby>read<rt>outer<ruby>x<rt>inner</rt></ruby>tail</rt></ruby>',
+    '<ruby>read<rt>outer<ruby>x<rt>inner</ruby>tail</rt></ruby>',
+  ]) {
+    const prefix = extension === 'vtt' ? 'WEBVTT\n\n' : '1\n';
+    expect(
+      importToText(
+        `captions.${extension}`,
+        `${prefix}00:01.000 --> 00:02.000\nPlease ${ruby} once.\n`,
+      ),
+    ).toBe('Please read once.');
+  }
+});
+
+it('keeps unattached and escaped ruby annotation text in a story import', () => {
+  const prefix = 'WEBVTT\n\n00:01.000 --> 00:02.000\n';
+  expect(importToText('captions.vtt', `${prefix}<rt>Dialogue</rt>`)).toBe('Dialogue');
+  expect(
+    importToText('captions.vtt', `${prefix}&lt;ruby&gt;read&lt;rt&gt;reed&lt;/rt&gt;&lt;/ruby&gt;`),
+  ).toBe('<ruby>read<rt>reed</rt></ruby>');
 });

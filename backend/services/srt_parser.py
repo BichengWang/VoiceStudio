@@ -261,6 +261,42 @@ _LINE_BREAK_RE = re.compile(r"<br[ \t]*/?>", re.IGNORECASE)
 _BARE_AMPERSAND_RE = re.compile(r"&(?!#\d+;|#[xX][0-9a-fA-F]+;|[A-Za-z][A-Za-z0-9]*;)")
 
 
+def _strip_cue_markup(text: str, markup: re.Pattern) -> str:
+    """Drop tags and ruby readings without repeating the base word in speech.
+
+    Scan the existing tag tokens once; no nested-tag regex on uploaded text.
+    An ``rt`` outside ``ruby`` is ordinary text, and closing ``ruby`` also
+    ends a reading whose optional ``</rt>`` was omitted.
+    """
+    parts = []
+    last = 0
+    ruby_depth = 0
+    reading_depths: list[int] = []
+    for match in markup.finditer(text):
+        if not reading_depths:
+            parts.append(text[last:match.start()])
+        token = match.group(0)
+        tag = re.match(r"</?(ruby|rt)(?=[. >])", token, re.IGNORECASE)
+        if tag:
+            closing = token.startswith("</")
+            if tag.group(1).lower() == "ruby":
+                if closing:
+                    while reading_depths and reading_depths[-1] >= ruby_depth:
+                        reading_depths.pop()
+                    ruby_depth = max(0, ruby_depth - 1)
+                else:
+                    ruby_depth += 1
+            elif closing:
+                if reading_depths:
+                    reading_depths.pop()
+            elif ruby_depth:
+                reading_depths.append(ruby_depth)
+        last = match.end()
+    if not reading_depths:
+        parts.append(text[last:])
+    return "".join(parts)
+
+
 def spoken_cue_text(text: str, *, webvtt: bool = False) -> str:
     """Return the words a cue should speak, without player markup.
 
@@ -271,7 +307,7 @@ def spoken_cue_text(text: str, *, webvtt: bool = False) -> str:
     timestamps) and ASS overrides are removed.
     """
     out = _LINE_BREAK_RE.sub(" ", _ASS_OVERRIDE_RE.sub("", text))
-    out = (_WEBVTT_TAG_RE if webvtt else _SRT_MARKUP_RE).sub("", out)
+    out = _strip_cue_markup(out, _WEBVTT_TAG_RE if webvtt else _SRT_MARKUP_RE)
     if webvtt:
         out = html.unescape(out)
     return "\n".join(line.strip() for line in out.split("\n") if line.strip())

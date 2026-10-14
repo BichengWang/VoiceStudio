@@ -415,3 +415,33 @@ def test_empty_webvtt_cue_does_not_capture_following_identifier(gap):
     result = parse_srt(text)
     assert result.skipped_cues == 1
     assert [cue['text'] for cue in result.segments] == ['Spoken text']
+
+
+@pytest.mark.parametrize("webvtt", [False, True])
+@pytest.mark.parametrize("ruby", [
+    "<ruby>read<rt>reed</rt></ruby>",
+    "<ruby.word>read<rt.reading><i>reed</i></rt></ruby>",
+    "<ruby>read<rt>reed</ruby>",
+    "<ruby>re<rt>ree</rt>ad<rt>ad</rt></ruby>",
+    "<ruby>read<rt>outer<ruby>x<rt>inner</rt></ruby>tail</rt></ruby>",
+    "<ruby>read<rt>outer<ruby>x<rt>inner</ruby>tail</rt></ruby>",
+])
+def test_ruby_annotations_are_not_spoken_and_source_markup_survives(webvtt, ruby):
+    from services.srt_parser import source_cue_or
+
+    cue = f"Please {ruby} once."
+    prefix = "WEBVTT\n\n" if webvtt else "1\n"
+    result = parse_srt(prefix + f"00:00:01.000 --> 00:00:02.000\n{cue}\n")
+    assert result.skipped_cues == 0
+    segment = result.segments[0]
+    assert segment["text"] == "Please read once."
+    assert segment["text_original"] == "Please read once."
+    source_key = "webvtt_source" if webvtt else "srt_source"
+    assert source_cue_or(segment, segment["text"], source_key) == cue
+
+
+def test_ruby_annotation_filter_keeps_unattached_and_escaped_rt_text():
+    from services.srt_parser import spoken_cue_text
+
+    assert spoken_cue_text("<rt>Dialogue</rt>", webvtt=True) == "Dialogue"
+    assert spoken_cue_text("&lt;ruby&gt;read&lt;rt&gt;reed&lt;/rt&gt;&lt;/ruby&gt;", webvtt=True) == "<ruby>read<rt>reed</rt></ruby>"

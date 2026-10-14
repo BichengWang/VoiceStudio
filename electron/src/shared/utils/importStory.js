@@ -41,6 +41,38 @@ function dropMatches(text, re, sep = '') {
   return out + text.slice(last);
 }
 
+/** Drop cue tags and ruby readings, keeping each base word once for speech. */
+function dropCueMarkup(text, re) {
+  const parts = [];
+  let last = 0;
+  let rubyDepth = 0;
+  const readingDepths = [];
+  for (const m of text.matchAll(re)) {
+    if (!readingDepths.length) parts.push(text.slice(last, m.index));
+    const tag = /^<\/?(ruby|rt)(?=[. >])/i.exec(m[0]);
+    if (tag) {
+      const closing = m[0].startsWith('</');
+      if (tag[1].toLowerCase() === 'ruby') {
+        if (closing) {
+          while (readingDepths.length && readingDepths[readingDepths.length - 1] >= rubyDepth) {
+            readingDepths.pop();
+          }
+          rubyDepth = Math.max(0, rubyDepth - 1);
+        } else {
+          rubyDepth += 1;
+        }
+      } else if (closing) {
+        readingDepths.pop();
+      } else if (rubyDepth) {
+        readingDepths.push(rubyDepth);
+      }
+    }
+    last = m.index + m[0].length;
+  }
+  if (!readingDepths.length) parts.push(text.slice(last));
+  return parts.join('');
+}
+
 /** Decode WebVTT character references without parsing cue text as HTML. */
 function unescapeWebVtt(text) {
   return text.includes('&') ? decode(text) : text;
@@ -67,7 +99,7 @@ function isWebVttMetadata(first) {
 /** Caption markup is not speech: karaoke spans, italics, `<br>`, `{\an8}` alignment. */
 function spokenCueText(text, webvtt = false) {
   const spaced = dropMatches(dropMatches(String(text || ''), ASS_OVERRIDE), LINE_BREAK, ' ');
-  const stripped = dropMatches(spaced, webvtt ? WEBVTT_TAG : CUE_MARKUP);
+  const stripped = dropCueMarkup(spaced, webvtt ? WEBVTT_TAG : CUE_MARKUP);
   const spoken = webvtt ? unescapeWebVtt(stripped) : stripped;
   return spoken.replace(/[^\S\n]+/g, ' ').trim();
 }
