@@ -46,6 +46,8 @@ Selecting a timeline cue, with the mouse or keyboard, reveals its transcript row
 without moving the timeline out of view; timing controls remain available while
 editing long projects. Expanded rows, resized inline notices and dismissed errors
 retain their correct virtualized positions.
+
+The Dubbing pane has a Projects tab beside its controls that lists saved dub projects, newest first. Selecting a project and confirming opens it in place (it waits while a dub is running); the Projects workspace remains the place to save, rename and delete.
 Timeline waveform peaks and onsets are computed once by the backend and cached as a
 small JSON payload; Chromium never decodes the full separated-vocals WAV to draw the
 timeline. Video previews are written atomically with MP4 fast-start metadata and are
